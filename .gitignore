@@ -1,0 +1,15 @@
+# Virtual enviroment
+venv/
+
+# Git&Python
+.git/
+.idea/
+__pycache__/
+
+# Project files
+misc/
+settings/app.log
+
+data/*
+!data/.gitkeep
+!data/parsed/.gitkeep
