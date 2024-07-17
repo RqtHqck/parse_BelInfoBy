@@ -48,7 +48,9 @@ class Parser:
         }
         self.file_path_env = None
         self.file_path_book = None
+        self.file_path_scv = None
         self.lock_treads = threading.Lock()
+
 
     def logger(self, text, saveonly=False, first=False, infunction=False, mode='a'):
         """Система логирования"""

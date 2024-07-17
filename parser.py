@@ -1,4 +1,5 @@
 # BASE LIBRARY
+import csv
 import random
 import time
 import lxml
@@ -65,7 +66,7 @@ def parse_categs_on_main(gen_url=URL, parser=parser):
         for a in urls:
             if a.text == MAIN_GROUP:
                 urls_dict[a.text] = gen_url + a.attrs['href'].replace('.html', '')
-        create_new_book(parser.file_path_book)
+        # create_new_book(parser.file_path_book)
         return urls_dict
     except Exception as e:
         parser.logger(f'Ошибка работы В функции parse_categs_on_main(gen_url=URL, parser=parser): {e}', saveonly=False, first=False, infunction=True)
@@ -145,17 +146,21 @@ def infinite_step_generator(start, step):
 def parse_page(soup, categ_name, page_num, lock, parser=parser):
     boxes = soup.find('div', {'id': "zverlistcolumn", "class": "ms_zverlistcolumn_city"}).find_all('div', {'class': 'zvers_c 111'})
     # print(boxes)
+    parser.file_path_scv = os.path.join('data', 'parsed')
     if boxes:
+        # data = []
         for box in boxes:
             try:
                 name = safe_get_text(box, [('div', {'class': 'contentcartochkazver'}), ('div', {'class': 's_c_title'})])
                 address = safe_get_text(box, [('div', {'class': 'infozvercartohkalist'}),('div', {'class': 's_c_m adrezz'})])
-                phone = safe_get_text(soup, [('div', {'class': 'telephonzz'}), ('span', {'class': 'ch_phone'})])
+                phone = ' '.join(safe_get_text(soup, [('div', {'class': 'telephonzz'}), ('span', {'class': 'ch_phone'})]).split())
                 site = safe_get_text(box, [('div', {'class': 'saitzzz'})])
                 if name and address and phone and site:
-                    row = [name, address, phone, site]
                     # print(f"NAME:{name}\nADDRES:{address}\nPHONE:{phone}\nSITE:{site}\n")
-                    add_to_sheet(parser.file_path_book, categ_name, row, lock)
+                    row = [name, address, phone, site]
+                    add_to_scv(parser.file_path_scv, categ_name, row, lock)
+                    # data.append(row)
+
             except Exception as e:
                 parser.logger(f'Ошибка работы В функции parse_page(soup, parser=parser) при работе с категорией: "{categ_name}", page_number:{page_num}: {e}',
                               saveonly=False, first=False, infunction=True)
@@ -198,10 +203,46 @@ def create_new_book(file_path, parser=parser):
         parser.logger(f"Произошла ошибка при создании книги create_new_book: {e}")
 
 
+def add_to_scv(dir_path, categ_name, row, lock, parser=parser):
+    """
+    Создаёт или добавляет файлы scv
+    """
+    columns = ['NAME', 'ADDRESS', 'PHONE', 'SITE']
+
+    # Формируем имя файла и полный путь
+    file_name = f'{categ_name.replace(" ", "_")}.csv'
+    file_path = os.path.join(dir_path, file_name)
+
+    try:
+        with lock:  # Используем блокировку для обеспечения потокобезопасности
+            # Открываем файл для добавления данных
+            file_exists = os.path.exists(file_path)
+
+            with open(file_path, mode='a', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=columns)
+
+                # Записываем заголовки только если файл был создан только что
+                if not file_exists:
+                    parser.logger(f"Файл по пути '{file_path}' не найден. Создаем файл.")
+                    writer.writeheader()  # Записываем заголовки
+
+                # Записываем данные
+                writer.writerow({
+                    'NAME': row[0],
+                    'ADDRESS': row[1],
+                    'PHONE': row[2],
+                    'SITE': row[3],
+                })
+                parser.logger(f"[+] Добавлены данные в файл '{file_path}': {row}")
+
+    except Exception as e:
+        parser.logger(f"Произошла ошибка при добавлении данных в файл {file_path}: {e}")
+
+
 def add_to_sheet(file_path, sheet_name, row, lock, parser=parser):
     try:
         cleared_sheet_name = clear_name_for_book(sheet_name)
-        columns = ['name', 'address', 'phone', 'site']
+        columns = ['NAME', 'ADDRESS', 'PHONE', 'SITE']
         # Проверяем существование файла
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Файл по пути {file_path} не существует.")
@@ -233,6 +274,29 @@ def add_to_sheet(file_path, sheet_name, row, lock, parser=parser):
         parser.logger(f'Ошибка добавления данных в лист "{cleared_sheet_name}" в функции add_to_sheet: {e}')
 
 
+def clear_data_parsed(dir_path):
+    """
+    Очищает все файлы и поддиректории в указанной директории.
+
+    :param dir_path: Путь к директории, которую нужно очистить.
+    """
+    try:
+        # Проверяем, существует ли директория
+        if os.path.exists(dir_path):
+            # Проходим по всем файлам и поддиректориям в директории
+            for item in os.listdir(dir_path):
+                item_path = os.path.join(dir_path, item)
+
+                # Если это файл, удаляем его
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                    print(f"Удален файл: {item_path}")
+        else:
+            print(f"Директория по пути '{dir_path}' не существует.")
+
+    except Exception as e:
+        print(f"Произошла ошибка при очистке директории '{dir_path}': {e}")
+
 def parse(parser):
     try:
         parser.logger('|---Программа начала свою работу---|', False, True)
@@ -241,6 +305,7 @@ def parse(parser):
         time = Time()
         lock = parser.lock_treads
         parser.file_path_env = os.path.join('settings', 'conf.env')
+        clear_data_parsed('data/parsed')
 
         parse_categs(parse_categs_on_main())
         categs_for_parse = parser.read_data('Categs.json', 'data', 'json')
